@@ -32,6 +32,17 @@ npm run build    # production build, must be clean
 
 No API keys needed. All data sources are free.
 
+## Configuration
+
+CycloneWatch needs **no environment variables and no API keys**, in development or production.
+
+| Source | Auth | Notes |
+| ------ | ---- | ----- |
+| NOAA National Hurricane Center (storm tracks, forecast cones) | None | Public domain GeoJSON, fetched server-side |
+| Open-Meteo (point conditions) | None | Keyless public API |
+
+If you add a keyed provider later, document it in this table.
+
 ## Features
 
 - **Live risk map** (Leaflet, dark basemap): active storm tracks, official forecast cones of uncertainty, 34/50/64 kt wind extent rings, and 38 major world container ports colored by risk band.
@@ -150,3 +161,7 @@ SKILL.md                   # Claude Code skill for the API
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Author
+
+Built by **Richardson Dackam** ([@richardsondx on X](https://x.com/richardsondx) · [github.com/richardsondx](https://github.com/richardsondx)).
