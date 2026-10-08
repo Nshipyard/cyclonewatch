@@ -356,23 +356,11 @@ export default function Home() {
                 cyclone risk score for that exact point, computed with the same
                 transparent formula as the port watchlist.
               </p>
-              <div className="mt-6 space-y-3">
-                {(
-                  [
-                    ["Miami, USA", "25.77,-80.17"],
-                    ["Houston, USA", "29.72,-95.08"],
-                    ["Freeport, Bahamas", "26.53,-78.70"],
-                  ] as const
-                ).map(([label, coords]) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between rounded-xl border border-neutral-200 px-4 py-2.5 text-sm"
-                  >
-                    <span className="font-medium text-neutral-800">{label}</span>
-                    <span className="text-neutral-400">{coords}</span>
-                  </div>
-                ))}
-              </div>
+              <p className="mt-6 text-sm leading-6 text-neutral-500">
+                The checker offers one-tap presets for Miami, Houston, and
+                Freeport, and works with any place name or coordinate pair,
+                not just the watchlist ports.
+              </p>
             </div>
             <div className="md:col-span-3">
               <LocationSearch onLocate={handleLocate} />

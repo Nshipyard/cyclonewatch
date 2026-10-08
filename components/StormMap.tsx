@@ -29,9 +29,13 @@ export default function StormMap({
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
   const cbRef = useRef(onStormSelect);
+  const dataRef = useRef({ storms, portRisks, customLocation, selectedStormId });
   useEffect(() => {
     cbRef.current = onStormSelect;
   }, [onStormSelect]);
+  useEffect(() => {
+    dataRef.current = { storms, portRisks, customLocation, selectedStormId };
+  }, [storms, portRisks, customLocation, selectedStormId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +45,8 @@ export default function StormMap({
       const map = leaflet.map(divRef.current, {
         worldCopyJump: true,
         zoomControl: true,
+        // The map must not hijack page scrolling on wheel.
+        scrollWheelZoom: false,
       });
       mapRef.current = map;
       leaflet
@@ -53,11 +59,34 @@ export default function StormMap({
         .addTo(map);
       layerRef.current = leaflet.layerGroup().addTo(map);
       map.setView([24, -60], 4);
+      // Fix blank-map race: re-measure once the container has settled.
+      setTimeout(() => {
+        if (!cancelled) map.invalidateSize();
+      }, 250);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function resetView() {
+    const map = mapRef.current;
+    if (!map) return;
+    const { storms, portRisks, customLocation } = dataRef.current;
+    const pts: [number, number][] = [];
+    storms.forEach((s) => pts.push([s.lat, s.lon]));
+    portRisks.forEach(({ port }) => pts.push([port.lat, port.lon]));
+    if (customLocation) pts.push([customLocation.lat, customLocation.lon]);
+    if (pts.length === 0) {
+      map.setView([24, -60], 4);
+      return;
+    }
+    // Dynamic import to avoid pulling leaflet into the handler bundle twice;
+    // the module is already loaded by the init effect.
+    import("leaflet").then((leaflet) => {
+      map.fitBounds(leaflet.default.latLngBounds(pts), { padding: [40, 40] });
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +102,9 @@ export default function StormMap({
       storms.forEach((storm) => {
         const selected = selectedStormId === null || selectedStormId === storm.id;
         const dim = selected ? 1 : 0.35;
+        // Only the selected storm (or all, when nothing is selected)
+        // contributes to the auto-fit bounds.
+        const inBounds = selected;
 
         // Cone of uncertainty
         if (storm.cone.length >= 3) {
@@ -85,7 +117,7 @@ export default function StormMap({
               fillOpacity: 0.08 * dim,
             })
             .addTo(layer);
-          storm.cone.forEach((p) => bounds.push(p));
+          if (inBounds) storm.cone.forEach((p) => bounds.push(p));
         }
 
         // Forecast track
@@ -98,7 +130,7 @@ export default function StormMap({
               opacity: 0.9 * dim,
             })
             .addTo(layer);
-          fc.forEach((p) => bounds.push(p));
+          if (inBounds) fc.forEach((p) => bounds.push(p));
           // Forecast points
           storm.forecast.forEach((p) => {
             leaflet
@@ -167,7 +199,7 @@ export default function StormMap({
           )
           .on("click", () => cbRef.current(storm.id))
           .addTo(layer);
-        bounds.push([storm.lat, storm.lon]);
+        if (inBounds) bounds.push([storm.lat, storm.lon]);
       });
 
       // Port markers colored by risk band
@@ -217,6 +249,13 @@ export default function StormMap({
   return (
     <div className="relative">
       <div ref={divRef} className="h-[420px] w-full md:h-[560px]" />
+      <button
+        type="button"
+        onClick={resetView}
+        className="absolute right-3 top-3 z-[500] rounded-xl bg-white/95 px-3 py-1.5 text-xs font-semibold text-neutral-700 shadow-lg backdrop-blur transition-colors hover:bg-white hover:text-neutral-900"
+      >
+        Reset view
+      </button>
       <div className="absolute bottom-3 left-3 z-[500] rounded-xl bg-white/95 px-3 py-2 text-[11px] leading-5 text-neutral-800 shadow-lg backdrop-blur">
         <div className="font-semibold text-neutral-900">Legend</div>
         <div className="flex items-center gap-1.5">

@@ -32,7 +32,7 @@ function Timeline({ entries }: { entries: TimelineEntry[] }) {
         >
           <div className="font-semibold text-neutral-900">{e.label}</div>
           {e.beyondForecast ? (
-            <div className="text-neutral-500">Beyond forecast window</div>
+            <div className="text-neutral-500">No NHC forecast point this far out</div>
           ) : (
             <>
               <div className="text-neutral-700">

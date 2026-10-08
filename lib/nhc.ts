@@ -343,36 +343,63 @@ const WMO: Record<number, string> = {
   95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
 };
 
+async function fetchJson<T>(url: string, ms: number): Promise<T> {
+  const res = await fetchWithTimeout(url, ms);
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return (await res.json()) as T;
+}
+
+interface WeatherPayload {
+  current?: {
+    time: string;
+    temperature_2m: number;
+    wind_speed_10m: number;
+    weather_code: number;
+  };
+}
+
+interface MarinePayload {
+  current?: { wave_height: number };
+}
+
 export async function fetchConditions(lat: number, lon: number): Promise<Conditions | null> {
-  try {
-    const [a, b] = await Promise.all([
-      fetchWithTimeout(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,weather_code&timezone=auto`,
-      ),
-      fetchWithTimeout(
-        `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height&timezone=auto`,
-      ),
-    ]);
-    if (!a.ok) return null;
-    const j = (await a.json()) as {
-      current?: { time: string; temperature_2m: number; wind_speed_10m: number; weather_code: number };
-    };
-    const c = j.current;
-    let wave: number | null = null;
-    if (b.ok) {
-      const mj = (await b.json()) as { current?: { wave_height: number } };
-      wave = mj.current?.wave_height ?? null;
+  const weatherUrl =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,wind_speed_10m,weather_code&timezone=auto`;
+  const marineUrl =
+    `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
+    `&current=wave_height&timezone=auto`;
+
+  // Marine is a nice-to-have: one short attempt, launched in parallel, and it
+  // can never fail the response.
+  const marinePromise: Promise<number | null> = fetchJson<MarinePayload>(marineUrl, 5000)
+    .then((mj) => mj.current?.wave_height ?? null)
+    .catch(() => null);
+
+  // Weather is essential: two bounded attempts (6s each). One slow upstream
+  // call can no longer hold the API for 14 seconds.
+  let weather: WeatherPayload | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const j = await fetchJson<WeatherPayload>(weatherUrl, 6000);
+      if (j.current) {
+        weather = j;
+        break;
+      }
+    } catch {
+      // Retry once, then give up on weather below.
     }
-    if (!c) return null;
-    return {
-      temperatureC: c.temperature_2m ?? null,
-      windKph: c.wind_speed_10m ?? null,
-      weatherCode: c.weather_code ?? null,
-      weatherLabel: WMO[c.weather_code] ?? "Unknown",
-      waveHeightM: wave,
-      time: c.time,
-    };
-  } catch {
-    return null;
   }
+
+  const waveHeightM = await marinePromise;
+  const c = weather?.current;
+  if (!c) return null;
+  return {
+    temperatureC: c.temperature_2m ?? null,
+    windKph: c.wind_speed_10m ?? null,
+    weatherCode: c.weather_code ?? null,
+    weatherLabel: WMO[c.weather_code] ?? "Unknown",
+    waveHeightM,
+    time: c.time,
+  };
 }

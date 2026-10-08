@@ -156,7 +156,7 @@ export function worstRisk(
   return best;
 }
 
-/** Alert timeline: storm distance/wind at T-72h, T-48h, T-24h and closest approach. */
+/** Alert timeline: storm distance/wind at +24h, +48h, +72h and closest approach. */
 export function buildTimeline(
   lat: number,
   lon: number,
@@ -181,9 +181,9 @@ export function buildTimeline(
 
   const lastTime = track[track.length - 1].time;
   const marks: { label: string; at: number }[] = [
-    { label: "T-72h", at: nowMs + 72 * 3600000 },
-    { label: "T-48h", at: nowMs + 48 * 3600000 },
-    { label: "T-24h", at: nowMs + 24 * 3600000 },
+    { label: "+24h", at: nowMs + 24 * 3600000 },
+    { label: "+48h", at: nowMs + 48 * 3600000 },
+    { label: "+72h", at: nowMs + 72 * 3600000 },
   ];
   const out: TimelineEntry[] = marks.map(({ label, at }) => {
     if (at > lastTime) {

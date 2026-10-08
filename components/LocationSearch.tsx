@@ -30,12 +30,63 @@ interface Props {
   onLocate: (lat: number, lon: number, label: string) => void;
 }
 
+const PRESETS = [
+  { label: "Miami, USA", lat: 25.77, lon: -80.17 },
+  { label: "Houston, USA", lat: 29.72, lon: -95.08 },
+  { label: "Freeport, Bahamas", lat: 26.53, lon: -78.7 },
+] as const;
+
+interface GeocodeHit {
+  name: string;
+  country: string;
+  admin1: string;
+  lat: number;
+  lon: number;
+}
+
 export default function LocationSearch({ onLocate }: Props) {
   const [lat, setLat] = useState("25.77");
   const [lon, setLon] = useState("-80.17");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RiskApiResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [place, setPlace] = useState("");
+  const [hits, setHits] = useState<GeocodeHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  async function searchPlace(e: React.FormEvent) {
+    e.preventDefault();
+    const q = place.trim();
+    if (q.length < 2) {
+      setSearchError("Type at least 2 characters.");
+      return;
+    }
+    setSearching(true);
+    setSearchError(null);
+    setHits([]);
+    try {
+      const res = await fetch(`/api/geocode?name=${encodeURIComponent(q)}&count=5`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Lookup returned ${res.status}`);
+      const list = data.results as GeocodeHit[];
+      setHits(list);
+      if (list.length === 0) setSearchError(`No matches for "${q}". Try coordinates below.`);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : "Place lookup failed.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function pickPlace(hit: GeocodeHit) {
+    setLat(hit.lat.toFixed(2));
+    setLon(hit.lon.toFixed(2));
+    setHits([]);
+    setPlace("");
+    const label = [hit.name, hit.admin1, hit.country].filter(Boolean).join(", ");
+    check(hit.lat, hit.lon, label);
+  }
 
   async function check(la: number, lo: number, label: string) {
     setLoading(true);
@@ -96,9 +147,77 @@ export default function LocationSearch({ onLocate }: Props) {
         Check any location
       </h3>
       <p className="mt-1 text-sm text-neutral-500">
-        Enter coordinates to get live conditions from Open-Meteo plus the
-        cyclone risk score for that exact point.
+        Search a place by name, or enter coordinates, to get live conditions
+        from Open-Meteo plus the cyclone risk score for that exact point.
       </p>
+
+      <form onSubmit={searchPlace} className="mt-4 flex gap-2">
+        <label className="flex-1">
+          <span className="text-xs font-medium text-neutral-600">Place name</span>
+          <input
+            value={place}
+            onChange={(e) => setPlace(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-blue-600 focus:outline-none"
+            placeholder="e.g. New Orleans"
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            disabled={searching || loading}
+            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {searching ? "Searching..." : "Find"}
+          </button>
+        </div>
+      </form>
+
+      {searchError && (
+        <p className="mt-2 text-sm text-red-700">{searchError}</p>
+      )}
+
+      {hits.length > 0 && (
+        <ul className="mt-2 divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
+          {hits.map((h, i) => (
+            <li key={`${h.lat},${h.lon},${i}`}>
+              <button
+                type="button"
+                onClick={() => pickPlace(h)}
+                className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm hover:bg-neutral-50"
+              >
+                <span className="font-medium text-neutral-900">
+                  {h.name}
+                  <span className="ml-2 font-normal text-neutral-500">
+                    {[h.admin1, h.country].filter(Boolean).join(", ")}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs text-neutral-400">
+                  {h.lat.toFixed(2)}, {h.lon.toFixed(2)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-neutral-500">Try:</span>
+        {PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              setLat(p.lat.toFixed(2));
+              setLon(p.lon.toFixed(2));
+              check(p.lat, p.lon, p.label);
+            }}
+            className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 transition-colors hover:border-blue-600 hover:text-blue-700 disabled:opacity-50"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       <form onSubmit={submit} className="mt-4 flex flex-col gap-3 sm:flex-row">
         <label className="flex-1">
@@ -200,17 +319,33 @@ export default function LocationSearch({ onLocate }: Props) {
             </div>
           )}
 
+          {!result.conditions && (
+            <p className="mt-3 text-sm text-neutral-500">
+              Live conditions are unavailable right now. The risk score above is
+              unaffected.
+            </p>
+          )}
+
           {result.risk ? (
             <div className="mt-3 text-sm text-neutral-700">
-              <p>
-                Driven by {result.risk.stormClassLabel} {result.risk.stormName}:
-                closest approach {formatKm(result.risk.closestDistanceKm)},{" "}
-                {result.risk.leadTimeHours <= 0
-                  ? "happening now"
-                  : `in ${formatHours(result.risk.leadTimeHours)}`}
-                , winds {result.risk.closestWindKt} kt
-                {result.risk.inCone ? ", inside the forecast cone" : ""}.
-              </p>
+              {result.risk.closestDistanceKm > 1200 ? (
+                <p>
+                  No active NHC storm is within scoring range (1,200 km), so this
+                  score reflects background conditions only. The nearest tracked
+                  storm is {result.risk.stormClassLabel} {result.risk.stormName},{" "}
+                  about {formatKm(result.risk.closestDistanceKm)} away.
+                </p>
+              ) : (
+                <p>
+                  Driven by {result.risk.stormClassLabel} {result.risk.stormName}:
+                  closest approach {formatKm(result.risk.closestDistanceKm)},{" "}
+                  {result.risk.leadTimeHours <= 0
+                    ? "happening now"
+                    : `in ${formatHours(result.risk.leadTimeHours)}`}
+                  , winds {result.risk.closestWindKt} kt
+                  {result.risk.inCone ? ", inside the forecast cone" : ""}.
+                </p>
+              )}
               <p className="mt-1 text-xs text-neutral-500">
                 Score math: proximity{" "}
                 {result.risk.components.proximity.toFixed(1)}/50 + wind{" "}
