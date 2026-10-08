@@ -1,0 +1,45 @@
+# CycloneWatch
+
+CycloneWatch is an open-source web app that turns official tropical cyclone
+forecasts into transparent 0-100 risk scores for ports, vessels, and any
+latitude/longitude on Earth. MIT licensed.
+
+Live site data comes from the NOAA National Hurricane Center (public domain),
+refreshed every 10 minutes, and Open-Meteo weather/marine APIs (CC-BY 4.0).
+CycloneWatch is an alerting layer, not a forecast model; always follow official
+NHC guidance.
+
+## JSON API (no key required)
+
+- GET /api/storms?mode=auto|live|demo
+  Returns { mode, storms, updatedAt, source, note }. Each storm includes id,
+  name, classification, intensityKt, pressureMb, lat/lon, movement, advisoryTime,
+  advisoryUrl, forecast[] ({time, lat, lon, windKt}), cone (polygon),
+  windExtents {kt34, kt50, kt64} (polygons), pastTrack, isDemo.
+  mode=auto: live data when storms are active, otherwise a labeled demo replay
+  of Hurricane Milton (Oct 2024). mode=live: real data only ("none" when quiet).
+
+- GET /api/risk?lat=25.77&lon=-80.17&mode=auto|live|demo
+  Returns { point, stormMode, stormsConsidered, risk, conditions, formula, updatedAt }.
+  risk = { score 0-100, band (watch|prepare|act), stormId, stormName,
+  stormClassLabel, closestDistanceKm, closestWindKt, leadTimeHours, inCone,
+  components {proximity, wind, urgency, coneBonus}, closestPoint }.
+  conditions = live Open-Meteo data { temperatureC, windKph, weatherLabel,
+  waveHeightM }. Returns 400 for invalid coordinates.
+
+- GET /api/health
+  Returns { ok, service, version, time, nhcReachable }.
+
+## Risk formula (auditable, shown in the UI)
+
+score = proximity(0-50) + wind(0-30) + urgency(0-20) + coneBonus(0 or 10), capped at 100.
+proximity = (1 - distanceKm/600) * 50; reach = max(0, 1 - distanceKm/1200);
+wind = (windKt/130) * 30 * reach; urgency = (1 - leadTimeH/120) * 20 * reach;
+coneBonus = 10 if inside the forecast cone.
+Bands: 0-33 Watch, 34-66 Prepare, 67-100 Act.
+
+## Suggested agent uses
+
+- "What is the cyclone risk for the Port of Houston right now?" -> /api/risk?lat=29.72&lon=-95.08
+- "List active storms with forecast tracks" -> /api/storms?mode=live
+- "Which of my facilities are in the Act band?" -> call /api/risk per facility, filter score >= 67

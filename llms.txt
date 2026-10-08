@@ -1,0 +1,20 @@
+# CycloneWatch
+
+Live tropical cyclone risk alerts for shipping, insurance, and coastal communities. Turns official hurricane forecasts into transparent 0-100 risk scores for ports, vessels, and any latitude/longitude on Earth, with the math shown for every score.
+
+- Repo: https://github.com/Nshipyard/cyclonewatch
+- Data: NOAA National Hurricane Center (public domain) for live storms; OpenMeteo (CC-BY 4.0) for conditions. Demo replay: Hurricane Milton (October 2024), clearly labeled, never mixed silently with live data.
+
+## API
+
+- GET /api/storms?mode=auto|live|demo — active (or demo) storms with forecast tracks, cones, wind extents, past tracks. `auto` (default) serves live NHC data when storms are active and the labeled demo replay when quiet. `live` returns real data only.
+- GET /api/risk?lat=25.77&lon=-80.17&mode=auto|live|demo — 0-100 risk score with closest approach, winds, alert timeline, and a plain-language score explanation.
+- GET /api/health — service status and current data mode.
+
+## Risk model
+
+Score 0-100 from: (a) minimum distance to the forecast cone/track, (b) maximum sustained wind, (c) lead time to closest approach. Bands: 0-33 Watch, 34-66 Prepare, 67-100 Act. Every score ships its inputs so it is auditable.
+
+## Honesty contract
+
+Demo content is flagged `isDemo: true` in API responses and badged in the UI (header, status bar, storm selector, map tooltip). Live data comes from NOAA NHC only.
